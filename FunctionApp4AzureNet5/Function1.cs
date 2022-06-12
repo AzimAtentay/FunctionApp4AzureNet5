@@ -23,9 +23,9 @@ namespace FunctionApp4AzureNet5
             _logger = loggerFactory.CreateLogger<Function1>();
         }
 
-        private DateTime StartOn { get; set; }
+        public DateTime StartOn { get; set; }
 
-        private DateTime EndOn { get; set; }
+        public DateTime EndOn { get; set; }
 
 
         [Function("AzAtFunction")]
@@ -38,6 +38,7 @@ namespace FunctionApp4AzureNet5
             string requestBody =  new StreamReader(req.Body).ReadToEnd();
             dynamic data = JsonConvert.DeserializeObject(requestBody);
 
+            // ***  Checking input values ****
             string startOn_s = data?.StartOn;
             string endOn_s = data?.EndOn;
             if (string.IsNullOrEmpty(startOn_s) || string.IsNullOrEmpty(endOn_s))
@@ -58,48 +59,59 @@ namespace FunctionApp4AzureNet5
                 response.WriteString("StartOn or EndOn has wrong format");
                 return response;
             }
+            
 
-            //var resDate = $"*** startOn_s={dt_startOn.ToString("s")}, EndOn={dt_endOn.ToString("s")} ***  ";
+            // *** Connecting and processing ***
+            ServiceClient service = null;
+            var result = string.Empty;
+            try
+            {
+                service = SetConnection();
+                result = MakeNew_msdyn_timeentry(service);
+            }
+            catch(Exception e)
+            {
+                result = "Error. Message: " + e.Message;
+            }
+            finally
+            {
+                if  (service!=null) service.Dispose();
+            }
 
-            var res = SetConnection();
-            response.WriteString("Status: " + res);
-
+            response.WriteString("Status: " + result);                        
             return response;
         }
 
         /// <summary>
         /// Connecting and start processing
         /// </summary>
+        /// <param name="connString">Optional parameter</param>
         /// <returns></returns>
-        string SetConnection()
+        public ServiceClient SetConnection(string connString = null)
         {
             //string connectionString = "AuthType='ClientSecret'; ServiceUri='https://azim.crm4.dynamics.com'; ClientId = 'fe9a7773-XXXX-4cac-XXXX-496ac5aeXXXX'; ClientSecret = 'G.XXXX-x3VrvkLFMn~XXXXPeu.1nkdrSpseVbXy'; ";
 
             // Get Connection strings(put local and Azure env together)
             var connParameter = "ConnString4Dataverse";
-            var connectionString =System.Environment.GetEnvironmentVariable(connParameter);
-                        
-            ServiceClient service = new ServiceClient(connectionString);
-            WhoAmIResponse whoAmIResponse = (WhoAmIResponse)service.Execute(new WhoAmIRequest());
+            var connectionString = System.Environment.GetEnvironmentVariable(connParameter);          
+            ServiceClient service = new ServiceClient(connString??connectionString);
+
+            //WhoAmIResponse whoAmIResponse = (WhoAmIResponse)service.Execute(new WhoAmIRequest());
             //string result = ($"Connected with UserId: {whoAmIResponse.UserId}");
 
-            var result = MakeNew_msdyn_timeentry(service);
-
-            service.Dispose();
-            return result;
+            return service;
         }
-
-       
+        
         /// <summary>
         /// Main process for store dates
         /// </summary>
         /// <param name="service"></param>
         /// <returns></returns>
-        string MakeNew_msdyn_timeentry(ServiceClient service)
+        public string MakeNew_msdyn_timeentry(ServiceClient service)
         {
-            // request for interval ==
+            // request for custom interval ==
             // if no records then save new 
-            // else show message - interval itersects existing data.
+            // else show message "interval itersects existing data".
             int countOfExist = RetrieveMultiple(service, this.StartOn, this.EndOn);
 
             if (countOfExist>0)
@@ -116,7 +128,7 @@ namespace FunctionApp4AzureNet5
                 }
             }
 
-            return $"Interval successfull stored";
+            return $"Interval saved successfully";
         }
 
         /// <summary>
@@ -124,14 +136,15 @@ namespace FunctionApp4AzureNet5
         /// </summary>
         /// <param name="service"></param>
         /// <param name="storeDay"></param>
+        /// <param name="description">not mandatory</param>
         /// <returns></returns>
-        string CreateNewRecord(ServiceClient service, DateTime storeDay)
+        public string CreateNewRecord(ServiceClient service, DateTime storeDay, string description = "")
         {
             Entity createAccount = new Entity("msdyn_timeentry");           
             createAccount["msdyn_start"] = storeDay.Date.AddHours(12); // set to noon
             createAccount["msdyn_end"] = storeDay.Date.AddHours(12).AddMinutes(5);// set to 5 minutes after noon
             createAccount["msdyn_duration"] = 0; // mandatory            
-            createAccount["msdyn_description"] = $"Record for RentReady. Date = {storeDay.ToString("d")}, inerval: {this.StartOn.ToString("d")} - {this.EndOn.ToString("d")}"  ;
+            createAccount["msdyn_description"] = (description!="")?description:$"Record for RentReady. Date = {storeDay.ToString("d")}, inerval: {this.StartOn.ToString("d")} - {this.EndOn.ToString("d")}";
 
             System.Guid createAccountId;
             // Now create that account in Dataverse. Note that the Dataverse
@@ -154,7 +167,7 @@ namespace FunctionApp4AzureNet5
         /// <param name="startDate"></param>
         /// <param name="endDate"></param>
         /// <returns></returns>
-        int RetrieveMultiple(ServiceClient service, DateTime startDate, DateTime endDate)
+        public int RetrieveMultiple(ServiceClient service, DateTime startDate, DateTime endDate)
         { 
             // *** Request Active records ****
             ConditionExpression condition1 = new ConditionExpression();
@@ -201,15 +214,15 @@ namespace FunctionApp4AzureNet5
         /// <summary>
         /// Retrieve the existing account and its attributes.
         /// </summary>
-        string RetrieveOneExisting(ServiceClient service)
-        {
-            Entity existAccount = new("msdyn_timeentry");
-            ColumnSet attributes = new("msdyn_start", "msdyn_end", "ownerid", "statecode", "msdyn_description", "msdyn_duration", "msdyn_type");
-            Guid accountid = new Guid("21557b3e-cee8-ec11-bb3c-000d3a29059c");
-            existAccount = service.Retrieve(existAccount.LogicalName, accountid, attributes);
+        //string RetrieveOneExisting(ServiceClient service)
+        //{
+        //    Entity existAccount = new("msdyn_timeentry");
+        //    ColumnSet attributes = new("msdyn_start", "msdyn_end", "ownerid", "statecode", "msdyn_description", "msdyn_duration", "msdyn_type");
+        //    Guid accountid = new Guid("21557b3e-cee8-ec11-bb3c-000d3a29059c");
+        //    existAccount = service.Retrieve(existAccount.LogicalName, accountid, attributes);
 
-            return string.Format(", msdyn_start: " + existAccount.Attributes["msdyn_start"] + ", msdyn_duration = " + existAccount.Attributes["msdyn_duration"] +
-                    ", msdyn_end = " + existAccount.Attributes["msdyn_end"]);
-        }
+        //    return string.Format(", msdyn_start: " + existAccount.Attributes["msdyn_start"] + ", msdyn_duration = " + existAccount.Attributes["msdyn_duration"] +
+        //            ", msdyn_end = " + existAccount.Attributes["msdyn_end"]);
+        //}
     }
 }
