@@ -1,0 +1,7 @@
+{
+  "profiles": {
+    "FunctionApp4AzureNet5": {
+      "commandName": "Project"
+    }
+  }
+}
