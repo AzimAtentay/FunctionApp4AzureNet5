@@ -29,7 +29,7 @@ namespace FunctionApp4AzureNet5Tests
 
 
         [Theory]
-        [InlineData("2022-07-01", "2022-07-03")]
+        [InlineData("2022-07-16", "2022-07-18")]
         public void TestWatchFunctionSuccess(string StartOn, string EndOn)
         {
 
@@ -55,17 +55,20 @@ namespace FunctionApp4AzureNet5Tests
 
             Assert.NotNull(result);
             Assert.Equal(HttpStatusCode.OK, result.StatusCode); 
-            Assert.True(responseBody.StartsWith("Status:") || responseBody.StartsWith("Error. Message:"));
+            Assert.True(responseBody.StartsWith("Status:") || responseBody.StartsWith("Error. Message:") || 
+                responseBody.StartsWith("Interval saved successfully") || responseBody.StartsWith("StartOn or EndOn has wrong format") || 
+                responseBody.StartsWith("StartOn or EndOn empty"));
+            
         }
 
-        private DefaultHttpRequest GenerateDefaultHttpRequest(object number)
-        {
-            var request = new DefaultHttpRequest(new DefaultHttpContext());
+        //private DefaultHttpRequest GenerateDefaultHttpRequest(object number)
+        //{
+        //    var request = new DefaultHttpRequest(new DefaultHttpContext());
 
-            var queryParams = new Dictionary<string, StringValues> { { "number", number.ToString() } };
-            request.Query = new QueryCollection(queryParams);
-            return request;
-        }
+        //    var queryParams = new Dictionary<string, StringValues> { { "number", number.ToString() } };
+        //    request.Query = new QueryCollection(queryParams);
+        //    return request;
+        //}
 
 
        
@@ -82,8 +85,92 @@ namespace FunctionApp4AzureNet5Tests
 
         }
 
-        [Fact]
-        public void TestStoreSuccess()
+        [Theory]
+        [InlineData("2022-08-03", "2022-08-04")]
+        public void TestStoreSuccess(string StartOn, string EndOn)
+        {
+            var stDay = DateTime.Today;
+            DateTime.TryParse(StartOn, out stDay);
+            var enDay = DateTime.Today;
+            DateTime.TryParse(EndOn, out enDay);
+
+            using var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+            var logger = loggerFactory.CreateLogger<Function1>();
+            var svc = new Function1(loggerFactory);
+            svc.StartOn = stDay;
+            svc.EndOn = enDay;
+            var sevice = svc.SetConnection(connString);
+            Assert.NotNull(sevice);
+
+            var result = svc.MakeNew_msdyn_timeentry(sevice);
+            
+            Assert.True((result.StartsWith("The interval intersects existing data") || result.StartsWith("Interval saved successfully") || result.StartsWith("Error when saving day")));
+        }
+
+        [Theory]
+        [InlineData("1001-01-01")]
+        public void TestStoreFail(string storeDay)
+        {
+            using var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+            var logger = loggerFactory.CreateLogger<Function1>();
+            var svc = new Function1(loggerFactory);            
+            var sevice = svc.SetConnection(connString);
+            Assert.NotNull(sevice);
+
+            var day = DateTime.Today;
+            DateTime.TryParse(storeDay, out day);
+
+            svc.StartOn = day;
+            svc.EndOn = day;
+
+            var result = svc.MakeNew_msdyn_timeentry(sevice);
+
+            Assert.StartsWith("Error when RetrieveMultiple days", result);
+        }
+        
+        [Theory]
+        [InlineData("1001-01-01", "3001-12-31")]
+        public void TestStoreIntervalOfDaysFail(string StartOn, string EndOn)
+        {
+            using var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+            var logger = loggerFactory.CreateLogger<Function1>();
+            var svc = new Function1(loggerFactory);            
+            var sevice = svc.SetConnection(connString);
+            Assert.NotNull(sevice);
+
+            var stDay = DateTime.Today;
+            DateTime.TryParse(StartOn, out stDay);
+            var enDay = DateTime.Today;
+            DateTime.TryParse(EndOn, out enDay);
+            
+            var result = svc.StoreIntervalOfDays(sevice, stDay, enDay);
+
+            Assert.StartsWith("Error when saving day:", result);
+        }
+
+        [Theory]
+        [InlineData("2022-09-01", "2022-09-02")]
+        public void TestStoreIntervalOfDaysSuccess(string StartOn, string EndOn)
+        {
+            using var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+            var logger = loggerFactory.CreateLogger<Function1>();
+            var svc = new Function1(loggerFactory);
+            var sevice = svc.SetConnection(connString);
+            Assert.NotNull(sevice);
+
+            var stDay = DateTime.Today;
+            DateTime.TryParse(StartOn, out stDay);
+            var enDay = DateTime.Today;
+            DateTime.TryParse(EndOn, out enDay);
+
+            var result = svc.StoreIntervalOfDays(sevice, stDay, enDay);
+
+            Assert.StartsWith("Error when saving day:", result);
+        }
+
+        [Theory]
+        [InlineData("2022-07-01")]
+        public void TestCreateNewSuccess(string storeDay)
         {
             using var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
             var logger = loggerFactory.CreateLogger<Function1>();
@@ -92,12 +179,34 @@ namespace FunctionApp4AzureNet5Tests
             svc.EndOn = DateTime.Today;
             var sevice = svc.SetConnection(connString);
             Assert.NotNull(sevice);
+            var day = DateTime.Today;
+            DateTime.TryParse(storeDay, out day);
 
-            var result = svc.MakeNew_msdyn_timeentry(sevice);
+            var result = svc.CreateNewRecord(sevice, day,"Testing Data");
             
-            Assert.True((result.StartsWith("The interval intersects existing data") || result.StartsWith("Interval saved successfully") || result.StartsWith("Error when saving day")));
-        } 
-        
+            Assert.Equal("", result);
+        }
+
+        [Theory]
+        [InlineData("1001-01-01")]
+        public void TestCreateNewFail(string storeDay)
+        {
+            using var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+            var logger = loggerFactory.CreateLogger<Function1>();
+            var svc = new Function1(loggerFactory);
+            svc.StartOn = DateTime.Today;
+            svc.EndOn = DateTime.Today;
+            var sevice = svc.SetConnection(connString);
+            Assert.NotNull(sevice);
+            var day = DateTime.Today;
+            DateTime.TryParse(storeDay, out day);
+
+            var result = svc.CreateNewRecord(sevice, day, "Testing Data");
+
+            Assert.StartsWith("Error on Create: DateTime is less than minumum value supported by CrmDateTime.", result);
+        }
+
+
         [Fact]
         public void TestRetrieveDatesSuccess()
         {
