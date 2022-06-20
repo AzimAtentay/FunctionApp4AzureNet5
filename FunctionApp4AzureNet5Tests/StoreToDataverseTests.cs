@@ -24,9 +24,13 @@ namespace FunctionApp4AzureNet5Tests
     public class StoreToDataverseTests
     {
         private string connString = "AuthType='ClientSecret'; ServiceUri='https://azim.crm4.dynamics.com'; ClientId = 'fe9a7773-3a3f-4cac-8ae1-496ac5ae54f1'; ClientSecret = 'G.S8Q~T-x3VrvkLFMn~Txi6Peu.1nkdrSpseVbXy';";
-     
-        [Fact]
-        public void TestWatchFunctionSuccess()
+
+        private ILogger m_logger = NullLoggerFactory.Instance.CreateLogger("Test");
+
+
+        [Theory]
+        [InlineData("2022-07-01", "2022-07-03")]
+        public void TestWatchFunctionSuccess(string StartOn, string EndOn)
         {
 
             using var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
@@ -34,7 +38,9 @@ namespace FunctionApp4AzureNet5Tests
             var svc = new Function1(loggerFactory);
 
             //--
-            var body = new MemoryStream(Encoding.ASCII.GetBytes("{\"StartOn\": \"2022-07-01\", \"EndOn\": \"2022-07-03\"}"));
+            //var body = new MemoryStream(Encoding.ASCII.GetBytes("{\"StartOn\": \"2022-07-01\", \"EndOn\": \"2022-07-03\"}"));
+            var body = new MemoryStream(Encoding.ASCII.GetBytes($"{{\"StartOn\": \"{StartOn}\", \"EndOn\": \"{EndOn}\"}}"));
+
             var context = new Mock<FunctionContext>();
             var request = new FakeHttpRequestData(
                             context.Object,
@@ -42,14 +48,27 @@ namespace FunctionApp4AzureNet5Tests
                             body);
             request.Headers.Add("Content-Type", "application/json");
 
-            var result = svc.Run(request);
+            HttpResponseData result = svc.Run(request);
+            result.Body.Seek(0, SeekOrigin.Begin);
             var reader = new StreamReader(result.Body);
             var responseBody = reader.ReadToEnd();
 
             Assert.NotNull(result);
-            Assert.Equal(HttpStatusCode.OK, result.StatusCode);
-            
+            Assert.Equal(HttpStatusCode.OK, result.StatusCode); 
+            Assert.True(responseBody.StartsWith("Status:") || responseBody.StartsWith("Error. Message:"));
         }
+
+        private DefaultHttpRequest GenerateDefaultHttpRequest(object number)
+        {
+            var request = new DefaultHttpRequest(new DefaultHttpContext());
+
+            var queryParams = new Dictionary<string, StringValues> { { "number", number.ToString() } };
+            request.Query = new QueryCollection(queryParams);
+            return request;
+        }
+
+
+       
 
         [Fact]
         public void TestConnectionSuccess()

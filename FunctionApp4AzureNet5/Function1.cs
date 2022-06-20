@@ -17,6 +17,7 @@ namespace FunctionApp4AzureNet5
     public class Function1
     {
         private readonly ILogger _logger;
+        private string m_connString = "AuthType='ClientSecret'; ServiceUri='https://azim.crm4.dynamics.com'; ClientId = 'fe9a7773-3a3f-4cac-8ae1-496ac5ae54f1'; ClientSecret = 'G.S8Q~T-x3VrvkLFMn~Txi6Peu.1nkdrSpseVbXy';";
 
         public Function1(ILoggerFactory loggerFactory)
         {
@@ -93,8 +94,9 @@ namespace FunctionApp4AzureNet5
 
             // Get Connection strings(put local and Azure env together)
             var connParameter = "ConnString4Dataverse";
-            var connectionString = System.Environment.GetEnvironmentVariable(connParameter);          
-            ServiceClient service = new ServiceClient(connString??connectionString);
+            var connectionString = System.Environment.GetEnvironmentVariable(connParameter);
+            // здесь используется m_connString, потому что команда " System.Environment.GetEnvironmentVariable(connParameter);" возвращает null при отработке xUnit.
+            ServiceClient service = new ServiceClient(connString??connectionString?? m_connString);
 
             //WhoAmIResponse whoAmIResponse = (WhoAmIResponse)service.Execute(new WhoAmIRequest());
             //string result = ($"Connected with UserId: {whoAmIResponse.UserId}");
